@@ -26,7 +26,8 @@ add_subdirectory(nlohmann_json)
 #------------------------------------------------------------------------
 # OpenSSL
 #
-find_package(OpenSSL 1.1 REQUIRED)
+# Specifying version causes issues when we are manually specifying the library files.
+find_package(OpenSSL REQUIRED)
 message(STATUS "OPENSSL_INCLUDE_DIR: ${OPENSSL_INCLUDE_DIR}")
 message(STATUS "OPENSSL_CRYPTO_LIBRARY: ${OPENSSL_CRYPTO_LIBRARY}")
 message(STATUS "OPENSSL_SSL_LIBRARY: ${OPENSSL_SSL_LIBRARY}")

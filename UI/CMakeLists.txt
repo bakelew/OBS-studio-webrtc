@@ -81,8 +81,9 @@ if( NOT libwebrtc_FOUND )
 endif()
 set( CMAKE_CXX_STANDARD ${_remember_cmake_cxx_standard} )
 if( NOT WEBRTC_H264_FOUND )
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_WEBRTC_H264")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDISABLE_WEBRTC_H264")
+  # This flag doesn't seem to work as intended. Seemingly disables H264, even when WebRTC is built with H264?
+  #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_WEBRTC_H264")
+  #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DDISABLE_WEBRTC_H264")
 endif()
 
 include_directories(${FFMPEG_INCLUDE_DIRS})
