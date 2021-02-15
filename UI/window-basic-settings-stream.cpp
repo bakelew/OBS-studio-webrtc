@@ -19,8 +19,11 @@ struct QCefCookieManager;
 extern QCef *cef;
 extern QCefCookieManager *panel_cookies;
 
-// #289 service list of radio buttons
-enum class ListOpt : int { Millicast = 1, CustomWebrtc, Custom };
+enum class ListOpt : int {
+	ShowAll = 1,
+	Custom,
+	Millicast, CustomWebrtc 
+};
 
 enum class Section : int {
 	Connect,
@@ -33,22 +36,14 @@ std::vector<std::string>::size_type webrtc_count = webrtc_services.size();
 
 inline bool OBSBasicSettings::IsCustomService() const
 {
-	// #289 service list of radio buttons
-	return ui->serviceButtonGroup->checkedId() == (int)ListOpt::Custom;
+	return ui->service->currentData().toInt() == (int)ListOpt::Custom;
 }
 
-inline bool OBSBasicSettings::IsWebRTC() const
+inline int OBSBasicSettings::IsWebRTC() const
 {
-	return ui->serviceButtonGroup->checkedId() < (int)ListOpt::Custom &&
-	       ui->serviceButtonGroup->checkedId() >= 0;
-}
-
-// #289 service list of radio buttons
-inline int OBSBasicSettings::GetServiceIndex() const
-{
-	if (-1 == ui->serviceButtonGroup->checkedId())
-		return 0;
-	return ui->serviceButtonGroup->checkedId();
+	if (ui->service->currentData().toInt() > (int)ListOpt::Custom)
+		return ui->service->currentData().toInt();
+	return 0;
 }
 
 void OBSBasicSettings::InitStreamPage()
@@ -73,8 +68,7 @@ void OBSBasicSettings::InitStreamPage()
 	m.setTop(vertSpacing / 2);
 	ui->streamkeyPageLayout->setContentsMargins(m);
 
-	// #289 service list of radio buttons
-	// LoadServices(false);
+	LoadServices(false);
 
 	ui->twitchAddonDropdown->addItem(
 		QTStr("Basic.Settings.Stream.TTVAddon.None"));
@@ -85,29 +79,25 @@ void OBSBasicSettings::InitStreamPage()
 	ui->twitchAddonDropdown->addItem(
 		QTStr("Basic.Settings.Stream.TTVAddon.Both"));
 
-	// #289 service list of radio buttons
-	connect(ui->serviceButtonGroup, SIGNAL(clicked(bool)), this,
+	connect(ui->service, SIGNAL(currentIndexChanged(int)), this,
 		SLOT(UpdateServerList()));
-	connect(ui->serviceButtonGroup, SIGNAL(clicked(bool)), this,
+	connect(ui->service, SIGNAL(currentIndexChanged(int)), this,
 		SLOT(UpdateKeyLink()));
-	connect(ui->serviceButtonGroup, SIGNAL(clicked(bool)), this,
+	connect(ui->service, SIGNAL(currentIndexChanged(int)), this,
 		SLOT(UpdateVodTrackSetting()));
-	connect(ui->serviceButtonGroup, SIGNAL(clicked(bool)), this,
+	connect(ui->service, SIGNAL(currentIndexChanged(int)), this,
 		SLOT(UpdateServiceRecommendations()));
-	// #289 service list of radio buttons
-	// connect(ui->serviceButtonGroup, SIGNAL(clicked(bool)), this,
-	//   SLOT(UpdateResFPSLimits()));
+	connect(ui->service, SIGNAL(currentIndexChanged(int)), this,
+		SLOT(UpdateResFPSLimits()));
 	connect(ui->customServer, SIGNAL(textChanged(const QString &)), this,
 		SLOT(UpdateKeyLink()));
 	connect(ui->ignoreRecommended, SIGNAL(clicked(bool)), this,
 		SLOT(DisplayEnforceWarning(bool)));
-	// #289 service list of radio buttons
-	// connect(ui->ignoreRecommended, SIGNAL(toggled(bool)), this,
-	// 	SLOT(UpdateResFPSLimits()));
+	connect(ui->ignoreRecommended, SIGNAL(toggled(bool)), this,
+		SLOT(UpdateResFPSLimits()));
 	connect(ui->customServer, SIGNAL(editingFinished(const QString &)),
 		this, SLOT(UpdateKeyLink()));
-	// #289 service list of radio buttons
-	connect(ui->serviceButtonGroup, SIGNAL(clicked(bool)), this,
+	connect(ui->service, SIGNAL(currentIndexChanged(int)), this,
 		SLOT(UpdateMoreInfoLink()));
 }
 
@@ -123,20 +113,12 @@ void OBSBasicSettings::LoadStream1Settings()
 
 	obs_data_t *settings = obs_service_get_settings(service_obj);
 
-	// #289 service list of radio buttons
-	const char *tmpString = nullptr;
-	tmpString = obs_data_get_string(settings, "service");
-	const char *service = strcmp("", tmpString) == 0 ? "Millicast-WebRTC"
-							 : tmpString;
-
+	const char *service = obs_data_get_string(settings, "service");
 	const char *server = obs_data_get_string(settings, "server");
 	const char *key = obs_data_get_string(settings, "key");
 
 	if (strcmp(type, "rtmp_custom") == 0) {
-		// #289 service list of radio buttons
-		QRadioButton *radiobutton = reinterpret_cast<QRadioButton *>(
-			ui->serviceButtonGroup->button(0));
-		radiobutton->setChecked(true);
+		ui->service->setCurrentIndex(0);
 		ui->customServer->setText(server);
 
 		bool use_auth = obs_data_get_bool(settings, "use_auth");
@@ -148,27 +130,18 @@ void OBSBasicSettings::LoadStream1Settings()
 		ui->authPw->setText(QT_UTF8(password));
 		ui->useAuth->setChecked(use_auth);
 	} else if (strcmp(type, "rtmp_common") == 0) {
-		// #289 service list of radio buttons
-		QList<QAbstractButton *> listButtons =
-			ui->serviceButtonGroup->buttons();
-		for (QList<QAbstractButton *>::iterator iter =
-			     listButtons.begin();
-		     iter != listButtons.end(); ++iter) {
-			QRadioButton *radiobutton =
-				reinterpret_cast<QRadioButton *>(*iter);
-			if (strcmp(service,
-				   radiobutton->text().toStdString().c_str()) ==
-			    0) {
-				radiobutton->setChecked(true);
-				break;
-			}
+		int idx = ui->service->findText(service);
+		if (idx == -1) {
+			if (service && *service)
+				ui->service->insertItem(1, service);
+			idx = 1;
 		}
+		ui->service->setCurrentIndex(idx);
 
 		bool bw_test = obs_data_get_bool(settings, "bwtest");
 		ui->bandwidthTestEnable->setChecked(bw_test);
 
-		int idx =
-			config_get_int(main->Config(), "Twitch", "AddonChoice");
+		idx = config_get_int(main->Config(), "Twitch", "AddonChoice");
 		ui->twitchAddonDropdown->setCurrentIndex(idx);
 	} else {
 		const char *room = obs_data_get_string(settings, "room");
@@ -176,6 +149,8 @@ void OBSBasicSettings::LoadStream1Settings()
 			obs_data_get_string(settings, "username");
 		const char *password =
 			obs_data_get_string(settings, "password");
+
+		const char *tmpString = nullptr;
 
 		tmpString = obs_data_get_string(settings, "codec");
 		// NOTE LUDO: #172 codecs list of radio buttons
@@ -193,22 +168,16 @@ void OBSBasicSettings::LoadStream1Settings()
 		const char *publish_api_url =
 			obs_data_get_string(settings, "publish_api_url");
 
-		// #289 service list of radio buttons
-		QList<QAbstractButton *> listButtons =
-			ui->serviceButtonGroup->buttons();
-		for (QList<QAbstractButton *>::iterator iter =
-			     listButtons.begin();
-		     iter != listButtons.end(); ++iter) {
-			QRadioButton *radiobutton =
-				reinterpret_cast<QRadioButton *>(*iter);
-			if (strcmp(service,
-				   radiobutton->text().toStdString().c_str()) ==
-			    0) {
-				radiobutton->setChecked(true);
+		int idx = 0;
+		for (std::vector<std::string>::size_type i = 0;
+		     i < webrtc_count; ++i) {
+			if (std::string(type) == webrtc_services[i]) {
+				idx = i + 1;
 				break;
 			}
 		}
 
+		ui->service->setCurrentIndex(idx);
 		ui->customServer->setText(server);
 		ui->room->setText(QT_UTF8(room));
 		ui->authUsername->setText(QT_UTF8(username));
@@ -219,10 +188,11 @@ void OBSBasicSettings::LoadStream1Settings()
 		// NOTE LUDO: #172 codecs list of radio buttons
 		// int idxC = ui->codec->findText(codec);
 		// ui->codec->setCurrentIndex(idxC);
-		listButtons = ui->codecButtonGroup->buttons();
-		for (QList<QAbstractButton *>::iterator iter =
-			     listButtons.begin();
-		     iter != listButtons.end(); ++iter) {
+		QList<QAbstractButton *> listButtons =
+			ui->codecButtonGroup->buttons();
+		QList<QAbstractButton *>::iterator iter;
+		for (iter = listButtons.begin(); iter != listButtons.end();
+		     ++iter) {
 			QRadioButton *radiobutton =
 				reinterpret_cast<QRadioButton *>(*iter);
 			if (strcmp(codec,
@@ -270,20 +240,18 @@ void OBSBasicSettings::LoadStream1Settings()
 
 	loading = false;
 
-	// #289 service list of radio buttons
-	// QMetaObject::invokeMethod(this, "UpdateResFPSLimits",
-	// 			  Qt::QueuedConnection);
+	QMetaObject::invokeMethod(this, "UpdateResFPSLimits",
+				  Qt::QueuedConnection);
 }
 
 void OBSBasicSettings::SaveStream1Settings()
 {
 	bool customServer = IsCustomService();
-	bool isWebrtc = IsWebRTC();
+	int webrtc = IsWebRTC();
 
-	// #289 service list of radio buttons
 	const char *service_id =
-		!isWebrtc ? customServer ? "rtmp_custom" : "rtmp_common"
-			  : webrtc_services[GetServiceIndex()].c_str();
+		webrtc == 0 ? customServer ? "rtmp_custom" : "rtmp_common"
+			    : webrtc_services[webrtc - 3].c_str();
 
 	obs_service_t *oldService = main->GetService();
 	OBSData hotkeyData = obs_hotkeys_save_service(oldService);
@@ -292,16 +260,13 @@ void OBSBasicSettings::SaveStream1Settings()
 	OBSData settings = obs_data_create();
 	obs_data_release(settings);
 
-	if (!customServer && !isWebrtc) {
-		// #289 service list of radio buttons
-		obs_data_set_string(
-			settings, "service",
-			QT_TO_UTF8(ui->serviceButtonGroup->checkedButton()
-					   ->text()));
+	if (!customServer && webrtc == 0) {
+		obs_data_set_string(settings, "service",
+				    QT_TO_UTF8(ui->service->currentText()));
 		obs_data_set_string(
 			settings, "server",
 			QT_TO_UTF8(ui->server->currentData().toString()));
-	} else if (customServer && !isWebrtc) {
+	} else if (customServer && webrtc == 0) {
 		obs_data_set_string(settings, "server",
 				    QT_TO_UTF8(ui->customServer->text()));
 		obs_data_set_bool(settings, "use_auth",
@@ -313,7 +278,7 @@ void OBSBasicSettings::SaveStream1Settings()
 			obs_data_set_string(settings, "password",
 					    QT_TO_UTF8(ui->authPw->text()));
 		}
-	} else if (isWebrtc) {
+	} else if (webrtc > 0) {
 		obs_data_set_string(settings, "server",
 				    QT_TO_UTF8(ui->customServer->text()));
 		obs_data_set_string(settings, "room",
@@ -382,19 +347,14 @@ void OBSBasicSettings::UpdateMoreInfoLink()
 	}
 
 	bool custom = IsCustomService();
-	bool isWebrtc = IsWebRTC();
-	// #289 service list of radio buttons
-	QString serviceName;
-	if (nullptr != ui->serviceButtonGroup->checkedButton()) {
-		serviceName = ui->serviceButtonGroup->checkedButton()->text();
-	} else {
-		serviceName = "";
-	}
+	int webrtc = IsWebRTC();
+	QString serviceName = ui->service->currentText();
 
-	if (custom || isWebrtc)
+	if (custom || webrtc > 0)
 		serviceName = "";
 
-	obs_properties_t *props = obs_get_service_properties("rtmp_common");
+	obs_properties_t *props = 
+obs_get_service_properties("rtmp_common");
 	obs_property_t *services = obs_properties_get(props, "service");
 
 	OBSData settings = obs_data_create();
@@ -417,13 +377,7 @@ void OBSBasicSettings::UpdateMoreInfoLink()
 
 void OBSBasicSettings::UpdateKeyLink()
 {
-	// #289 service list of radio buttons
-	QString serviceName;
-	if (nullptr != ui->serviceButtonGroup->checkedButton()) {
-		serviceName = ui->serviceButtonGroup->checkedButton()->text();
-	} else {
-		serviceName = "";
-	}
+	QString serviceName = ui->service->currentText();
 	QString customServer = ui->customServer->text();
 	QString streamKeyLink;
 	if (serviceName == "Twitch") {
@@ -453,64 +407,63 @@ void OBSBasicSettings::UpdateKeyLink()
 	}
 }
 
-// #289 service list of radio buttons
-// void OBSBasicSettings::LoadServices(bool showAll)
-// {
-// 	obs_properties_t *props = obs_get_service_properties("rtmp_common");
+void OBSBasicSettings::LoadServices(bool showAll)
+{
+	obs_properties_t *props = obs_get_service_properties("rtmp_common");
 
-// 	OBSData settings = obs_data_create();
-// 	obs_data_release(settings);
+	OBSData settings = obs_data_create();
+	obs_data_release(settings);
 
-// 	obs_data_set_bool(settings, "show_all", showAll);
+	obs_data_set_bool(settings, "show_all", showAll);
 
-// 	obs_property_t *prop = obs_properties_get(props, "show_all");
-// 	obs_property_modified(prop, settings);
+	obs_property_t *prop = obs_properties_get(props, "show_all");
+	obs_property_modified(prop, settings);
 
-// 	ui->service->blockSignals(true);
-// 	ui->service->clear();
+	ui->service->blockSignals(true);
+	ui->service->clear();
 
-// 	QStringList names;
+	QStringList names;
 
-// 	obs_property_t *services = obs_properties_get(props, "service");
-// 	size_t services_count = obs_property_list_item_count(services);
-// 	for (size_t i = 0; i < services_count; i++) {
-// 		const char *name = obs_property_list_item_string(services, i);
-// 		names.push_back(name);
-// 	}
+	obs_property_t *services = obs_properties_get(props, "service");
+	size_t services_count = obs_property_list_item_count(services);
+	for (size_t i = 0; i < services_count; i++) {
+		const char *name = obs_property_list_item_string(services, i);
+		names.push_back(name);
+	}
 
-// 	if (showAll)
-// 		names.sort(Qt::CaseInsensitive);
+	if (showAll)
+		names.sort(Qt::CaseInsensitive);
 
-// 	for (QString &name : names)
-// 		ui->service->addItem(name);
+	for (QString &name : names)
+		ui->service->addItem(name);
 
-// 	if (!showAll) {
-// 		ui->service->addItem(
-// 			QTStr("Basic.AutoConfig.StreamPage.Service.ShowAll"),
-// 			QVariant((int)ListOpt::ShowAll));
-// 	}
+	if (!showAll) {
+		ui->service->addItem(
+			QTStr("Basic.AutoConfig.StreamPage.Service.ShowAll"),
+			QVariant((int)ListOpt::ShowAll));
+	}
 
-// 	for (std::vector<std::string>::size_type i = webrtc_count; i-- > 0;) {
-// 		ui->service->insertItem(0,
-// 					obs_service_get_display_name(
-// 						webrtc_services[i].c_str()),
-// 					QVariant((int)i + 3));
-// 	}
+	for (std::vector<std::string>::size_type i = webrtc_count; i-- > 0;) {
+		ui->service->insertItem(0,
+					obs_service_get_display_name(
+						webrtc_services[i].c_str()),
+					QVariant((int)i + 3));
+	}
 
-// 	ui->service->insertItem(
-// 		0, QTStr("Basic.AutoConfig.StreamPage.Service.Custom"),
-// 		QVariant((int)ListOpt::Custom));
+	ui->service->insertItem(
+		0, QTStr("Basic.AutoConfig.StreamPage.Service.Custom"),
+		QVariant((int)ListOpt::Custom));
 
-// 	if (!lastService.isEmpty()) {
-// 		int idx = ui->service->findText(lastService);
-// 		if (idx != -1)
-// 			ui->service->setCurrentIndex(idx);
-// 	}
+	if (!lastService.isEmpty()) {
+		int idx = ui->service->findText(lastService);
+		if (idx != -1)
+			ui->service->setCurrentIndex(idx);
+	}
 
-// 	obs_properties_destroy(props);
+	obs_properties_destroy(props);
 
-// 	ui->service->blockSignals(false);
-// }
+	ui->service->blockSignals(false);
+}
 
 static inline bool is_auth_service(const std::string &service)
 {
@@ -519,17 +472,14 @@ static inline bool is_auth_service(const std::string &service)
 
 void OBSBasicSettings::on_service_currentIndexChanged(int)
 {
-	// #289 service list of radio buttons
-	// bool showMore = ui->service->currentData().toInt() ==
-	// 		(int)ListOpt::ShowAll;
-	// if (showMore)
-	// 	return;
+	bool showMore = ui->service->currentData().toInt() ==
+			(int)ListOpt::ShowAll;
+	if (showMore)
+		return;
 
-	// #289 service list of radio buttons
-	std::string service =
-		QT_TO_UTF8(ui->serviceButtonGroup->checkedButton()->text());
+	std::string service = QT_TO_UTF8(ui->service->currentText());
 	bool custom = IsCustomService();
-	bool isWebrtc = IsWebRTC();
+	int webrtc = IsWebRTC();
 
 	ui->disconnectAccount->setVisible(false);
 	ui->bandwidthTestEnable->setVisible(false);
@@ -537,7 +487,7 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 	ui->twitchAddonLabel->setVisible(false);
 
 #ifdef BROWSER_AVAILABLE
-	if (cef && !isWebrtc) {
+	if (cef && webrtc == 0) {
 		if (lastService != service.c_str()) {
 			QString key = ui->key->text();
 			bool can_auth = is_auth_service(service);
@@ -557,14 +507,13 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 	ui->connectAccount2->setVisible(false);
 #endif
 
-	// #289 service list of radio buttons
-	ui->useAuth->setVisible(custom && !isWebrtc);
-	ui->authUsernameLabel->setVisible(custom || isWebrtc);
-	ui->authUsername->setVisible(custom || isWebrtc);
+	ui->useAuth->setVisible(custom && webrtc == 0);
+	ui->authUsernameLabel->setVisible(custom || webrtc > 0);
+	ui->authUsername->setVisible(custom || webrtc > 0);
 	ui->authPwLabel->setVisible(custom);
 	ui->authPwWidget->setVisible(custom);
 
-	if (custom && !isWebrtc) {
+	if (custom && webrtc == 0) {
 		ui->streamkeyPageLayout->insertRow(1, ui->serverLabel,
 						   ui->serverStackedWidget);
 		ui->streamkeyPageLayout->insertRow(2, ui->streamKeyLabel,
@@ -597,14 +546,14 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 		ui->simulcastEnable->setVisible(false);
 		ui->publishApiUrlLabel->setVisible(false);
 		ui->publishApiUrl->setVisible(false);
-	} else if (isWebrtc) {
+	} else if (webrtc > 0) {
 		ui->streamKeyLabel->setVisible(false);
 		ui->streamKeyWidget->setVisible(false);
 		ui->serverStackedWidget->setCurrentIndex(1);
 		ui->serverLabel->setVisible(true);
 		ui->serverStackedWidget->setVisible(true);
 		obs_properties_t *props = obs_get_service_properties(
-			webrtc_services[GetServiceIndex()].c_str());
+			webrtc_services[(int)webrtc - 3].c_str());
 		obs_property_t *server = obs_properties_get(props, "server");
 		obs_property_t *room = obs_properties_get(props, "room");
 		obs_property_t *username =
@@ -681,7 +630,7 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 		ui->publishApiUrlLabel->setVisible(false);
 		ui->publishApiUrl->setVisible(false);
 		obs_properties_destroy(props);
-	} else if (!custom && !isWebrtc) {
+	} else if (!custom && webrtc == 0) {
 		ui->authUsernameLabel->setText("Username");
 		ui->authPwLabel->setText("Password");
 		ui->streamkeyPageLayout->insertRow(1, ui->serverLabel,
@@ -729,9 +678,17 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 
 void OBSBasicSettings::UpdateServerList()
 {
-	// #289 service list of radio buttons
-	QString serviceName = ui->serviceButtonGroup->checkedButton()->text();
-	lastService = serviceName;
+	QString serviceName = ui->service->currentText();
+	bool showMore = ui->service->currentData().toInt() ==
+			(int)ListOpt::ShowAll;
+
+	if (showMore) {
+		LoadServices(true);
+		ui->service->showPopup();
+		return;
+	} else {
+		lastService = serviceName;
+	}
 
 	obs_properties_t *props = obs_get_service_properties("rtmp_common");
 	obs_property_t *services = obs_properties_get(props, "service");
@@ -781,22 +738,18 @@ void OBSBasicSettings::on_authPwShow_clicked()
 OBSService OBSBasicSettings::SpawnTempService()
 {
 	bool custom = IsCustomService();
-	// #289 service list of radio buttons
-	bool isWebrtc = IsWebRTC();
+	int webrtc = IsWebRTC();
 
 	const char *service_id =
-		!isWebrtc ? custom ? "rtmp_custom" : "rtmp_common"
-			  : webrtc_services[GetServiceIndex()].c_str();
+		webrtc == 0 ? custom ? "rtmp_custom" : "rtmp_common"
+			    : webrtc_services[webrtc - 3].c_str();
 
 	OBSData settings = obs_data_create();
 	obs_data_release(settings);
 
-	if (!custom && !isWebrtc) {
-		// #289 service list of radio buttons
-		obs_data_set_string(
-			settings, "service",
-			QT_TO_UTF8(ui->serviceButtonGroup->checkedButton()
-					   ->text()));
+	if (!custom && webrtc == 0) {
+		obs_data_set_string(settings, "service",
+				    QT_TO_UTF8(ui->service->currentText()));
 		obs_data_set_string(
 			settings, "server",
 			QT_TO_UTF8(ui->server->currentData().toString()));
@@ -844,9 +797,7 @@ void OBSBasicSettings::OnOAuthStreamKeyConnected()
 
 void OBSBasicSettings::OnAuthConnected()
 {
-	// #289 service list of radio buttons
-	std::string service =
-		QT_TO_UTF8(ui->serviceButtonGroup->checkedButton()->text());
+	std::string service = QT_TO_UTF8(ui->service->currentText());
 	Auth::Type type = Auth::AuthType(service);
 
 	if (type == Auth::Type::OAuth_StreamKey) {
@@ -862,9 +813,7 @@ void OBSBasicSettings::OnAuthConnected()
 void OBSBasicSettings::on_connectAccount_clicked()
 {
 #ifdef BROWSER_AVAILABLE
-	// #289 service list of radio buttons
-	std::string service =
-		QT_TO_UTF8(ui->serviceButtonGroup->checkedButton()->text());
+	std::string service = QT_TO_UTF8(ui->service->currentText());
 
 	OAuth::DeleteCookies(service);
 
@@ -893,17 +842,15 @@ void OBSBasicSettings::on_disconnectAccount_clicked()
 	main->auth.reset();
 	auth.reset();
 
-	// #289 service list of radio buttons
-	std::string service =
-		QT_TO_UTF8(ui->serviceButtonGroup->checkedButton()->text());
+	std::string service = QT_TO_UTF8(ui->service->currentText());
 
 #ifdef BROWSER_AVAILABLE
 	OAuth::DeleteCookies(service);
 #endif
 
-	bool isWebrtc = IsWebRTC();
+	int webrtc = IsWebRTC();
 
-	if (isWebrtc) {
+	if (webrtc > 0) {
 		ui->streamKeyWidget->setVisible(false);
 		ui->streamKeyLabel->setVisible(false);
 	} else {
@@ -945,9 +892,7 @@ void OBSBasicSettings::UpdateVodTrackSetting()
 {
 	bool enableForCustomServer = config_get_bool(
 		GetGlobalConfig(), "General", "EnableCustomServerVodTrack");
-	// #289 service list of radio buttons
-	bool enableVodTrack = ui->serviceButtonGroup->checkedButton()->text() ==
-			      "Twitch";
+	bool enableVodTrack = ui->service->currentText() == "Twitch";
 	bool wasEnabled = !!vodTrackCheckbox;
 
 	if (enableForCustomServer && IsCustomService())
@@ -1186,202 +1131,201 @@ extern void set_closest_res(int &cx, int &cy,
  * which as of this writing, and hopefully for the foreseeable future, there is
  * only one.
  */
-// #289 service list of radio buttons
-// void OBSBasicSettings::UpdateResFPSLimits()
-// {
-// 	if (loading)
-// 		return;
+void OBSBasicSettings::UpdateResFPSLimits()
+{
+	if (loading)
+		return;
 
-// 	int idx = ui->service->currentIndex();
-// 	if (idx == -1)
-// 		return;
+	int idx = ui->service->currentIndex();
+	if (idx == -1)
+		return;
 
-// 	bool ignoreRecommended = ui->ignoreRecommended->isChecked();
-// 	BPtr<obs_service_resolution> res_list;
-// 	size_t res_count = 0;
-// 	int max_fps = 0;
+	bool ignoreRecommended = ui->ignoreRecommended->isChecked();
+	BPtr<obs_service_resolution> res_list;
+	size_t res_count = 0;
+	int max_fps = 0;
 
-// 	if (!IsCustomService() && !ignoreRecommended) {
-// 		OBSService service = GetStream1Service();
-// 		obs_service_get_supported_resolutions(service, &res_list,
-// 						      &res_count);
-// 		obs_service_get_max_fps(service, &max_fps);
-// 	}
+	if (!IsCustomService() && !ignoreRecommended) {
+		OBSService service = GetStream1Service();
+		obs_service_get_supported_resolutions(service, &res_list,
+						      &res_count);
+		obs_service_get_max_fps(service, &max_fps);
+	}
 
-// 	/* ------------------------------------ */
-// 	/* Check for enforced res/FPS           */
+	/* ------------------------------------ */
+	/* Check for enforced res/FPS           */
 
-// 	QString res = ui->outputResolution->currentText();
-// 	QString fps_str;
-// 	int cx = 0, cy = 0;
-// 	double max_fpsd = (double)max_fps;
-// 	int closest_fps_index = -1;
-// 	double fpsd;
+	QString res = ui->outputResolution->currentText();
+	QString fps_str;
+	int cx = 0, cy = 0;
+	double max_fpsd = (double)max_fps;
+	int closest_fps_index = -1;
+	double fpsd;
 
-// 	sscanf(QT_TO_UTF8(res), "%dx%d", &cx, &cy);
+	sscanf(QT_TO_UTF8(res), "%dx%d", &cx, &cy);
 
-// 	if (res_count)
-// 		set_closest_res(cx, cy, res_list, res_count);
+	if (res_count)
+		set_closest_res(cx, cy, res_list, res_count);
 
-// 	if (max_fps) {
-// 		int fpsType = ui->fpsType->currentIndex();
+	if (max_fps) {
+		int fpsType = ui->fpsType->currentIndex();
 
-// 		if (fpsType == 1) { //Integer
-// 			fpsd = (double)ui->fpsInteger->value();
-// 		} else if (fpsType == 2) { //Fractional
-// 			fpsd = (double)ui->fpsNumerator->value() /
-// 			       (double)ui->fpsDenominator->value();
-// 		} else { //Common
-// 			sscanf(QT_TO_UTF8(ui->fpsCommon->currentText()), "%lf",
-// 			       &fpsd);
-// 		}
+		if (fpsType == 1) { //Integer
+			fpsd = (double)ui->fpsInteger->value();
+		} else if (fpsType == 2) { //Fractional
+			fpsd = (double)ui->fpsNumerator->value() /
+			       (double)ui->fpsDenominator->value();
+		} else { //Common
+			sscanf(QT_TO_UTF8(ui->fpsCommon->currentText()), "%lf",
+			       &fpsd);
+		}
 
-// 		double closest_diff = 1000000000000.0;
+		double closest_diff = 1000000000000.0;
 
-// 		for (int i = 0; i < ui->fpsCommon->count(); i++) {
-// 			double com_fpsd;
-// 			sscanf(QT_TO_UTF8(ui->fpsCommon->itemText(i)), "%lf",
-// 			       &com_fpsd);
+		for (int i = 0; i < ui->fpsCommon->count(); i++) {
+			double com_fpsd;
+			sscanf(QT_TO_UTF8(ui->fpsCommon->itemText(i)), "%lf",
+			       &com_fpsd);
 
-// 			if (com_fpsd > max_fpsd) {
-// 				continue;
-// 			}
+			if (com_fpsd > max_fpsd) {
+				continue;
+			}
 
-// 			double diff = fabs(com_fpsd - fpsd);
-// 			if (diff < closest_diff) {
-// 				closest_diff = diff;
-// 				closest_fps_index = i;
-// 				fps_str = ui->fpsCommon->itemText(i);
-// 			}
-// 		}
-// 	}
+			double diff = fabs(com_fpsd - fpsd);
+			if (diff < closest_diff) {
+				closest_diff = diff;
+				closest_fps_index = i;
+				fps_str = ui->fpsCommon->itemText(i);
+			}
+		}
+	}
 
-// 	QString res_str =
-// 		QString("%1x%2").arg(QString::number(cx), QString::number(cy));
+	QString res_str =
+		QString("%1x%2").arg(QString::number(cx), QString::number(cy));
 
-// 	/* ------------------------------------ */
-// 	/* Display message box if res/FPS bad   */
+	/* ------------------------------------ */
+	/* Display message box if res/FPS bad   */
 
-// 	bool valid = ResFPSValid(res_list, res_count, max_fps);
+	bool valid = ResFPSValid(res_list, res_count, max_fps);
 
-// 	if (!valid) {
-// 		/* if the user was already on facebook with an incompatible
-// 		 * resolution, assume it's an upgrade */
-// 		if (lastServiceIdx == -1 && lastIgnoreRecommended == -1) {
-// 			ui->ignoreRecommended->setChecked(true);
-// 			ui->ignoreRecommended->setProperty("changed", true);
-// 			stream1Changed = true;
-// 			EnableApplyButton(true);
-// 			UpdateResFPSLimits();
-// 			return;
-// 		}
+	if (!valid) {
+		/* if the user was already on facebook with an incompatible
+		 * resolution, assume it's an upgrade */
+		if (lastServiceIdx == -1 && lastIgnoreRecommended == -1) {
+			ui->ignoreRecommended->setChecked(true);
+			ui->ignoreRecommended->setProperty("changed", true);
+			stream1Changed = true;
+			EnableApplyButton(true);
+			UpdateResFPSLimits();
+			return;
+		}
 
-// 		QMessageBox::StandardButton button;
+		QMessageBox::StandardButton button;
 
-// #define WARNING_VAL(x) \
-// 	QTStr("Basic.Settings.Output.Warn.EnforceResolutionFPS." x)
+#define WARNING_VAL(x) \
+	QTStr("Basic.Settings.Output.Warn.EnforceResolutionFPS." x)
 
-// 		QString str;
-// 		if (res_count)
-// 			str += WARNING_VAL("Resolution").arg(res_str);
-// 		if (max_fps) {
-// 			if (!str.isEmpty())
-// 				str += "\n";
-// 			str += WARNING_VAL("FPS").arg(fps_str);
-// 		}
+		QString str;
+		if (res_count)
+			str += WARNING_VAL("Resolution").arg(res_str);
+		if (max_fps) {
+			if (!str.isEmpty())
+				str += "\n";
+			str += WARNING_VAL("FPS").arg(fps_str);
+		}
 
-// 		button = OBSMessageBox::question(this, WARNING_VAL("Title"),
-// 						 WARNING_VAL("Msg").arg(str));
-// #undef WARNING_VAL
+		button = OBSMessageBox::question(this, WARNING_VAL("Title"),
+						 WARNING_VAL("Msg").arg(str));
+#undef WARNING_VAL
 
-// 		if (button == QMessageBox::No) {
-// 			if (idx != lastServiceIdx)
-// 				QMetaObject::invokeMethod(
-// 					ui->service, "setCurrentIndex",
-// 					Qt::QueuedConnection,
-// 					Q_ARG(int, lastServiceIdx));
-// 			else
-// 				QMetaObject::invokeMethod(ui->ignoreRecommended,
-// 							  "setChecked",
-// 							  Qt::QueuedConnection,
-// 							  Q_ARG(bool, true));
-// 			return;
-// 		}
-// 	}
+		if (button == QMessageBox::No) {
+			if (idx != lastServiceIdx)
+				QMetaObject::invokeMethod(
+					ui->service, "setCurrentIndex",
+					Qt::QueuedConnection,
+					Q_ARG(int, lastServiceIdx));
+			else
+				QMetaObject::invokeMethod(ui->ignoreRecommended,
+							  "setChecked",
+							  Qt::QueuedConnection,
+							  Q_ARG(bool, true));
+			return;
+		}
+	}
 
-// 	/* ------------------------------------ */
-// 	/* Update widgets/values if switching   */
-// 	/* to/from enforced resolution/FPS      */
+	/* ------------------------------------ */
+	/* Update widgets/values if switching   */
+	/* to/from enforced resolution/FPS      */
 
-// 	ui->outputResolution->blockSignals(true);
-// 	if (res_count) {
-// 		ui->outputResolution->clear();
-// 		ui->outputResolution->setEditable(false);
+	ui->outputResolution->blockSignals(true);
+	if (res_count) {
+		ui->outputResolution->clear();
+		ui->outputResolution->setEditable(false);
 
-// 		int new_res_index = -1;
+		int new_res_index = -1;
 
-// 		for (size_t i = 0; i < res_count; i++) {
-// 			obs_service_resolution val = res_list[i];
-// 			QString str =
-// 				QString("%1x%2").arg(QString::number(val.cx),
-// 						     QString::number(val.cy));
-// 			ui->outputResolution->addItem(str);
+		for (size_t i = 0; i < res_count; i++) {
+			obs_service_resolution val = res_list[i];
+			QString str =
+				QString("%1x%2").arg(QString::number(val.cx),
+						     QString::number(val.cy));
+			ui->outputResolution->addItem(str);
 
-// 			if (val.cx == cx && val.cy == cy)
-// 				new_res_index = (int)i;
-// 		}
+			if (val.cx == cx && val.cy == cy)
+				new_res_index = (int)i;
+		}
 
-// 		ui->outputResolution->setCurrentIndex(new_res_index);
-// 		if (!valid) {
-// 			ui->outputResolution->setProperty("changed", true);
-// 			videoChanged = true;
-// 			EnableApplyButton(true);
-// 		}
-// 	} else {
-// 		QString baseRes = ui->baseResolution->currentText();
-// 		int baseCX, baseCY;
-// 		sscanf(QT_TO_UTF8(baseRes), "%dx%d", &baseCX, &baseCY);
+		ui->outputResolution->setCurrentIndex(new_res_index);
+		if (!valid) {
+			ui->outputResolution->setProperty("changed", true);
+			videoChanged = true;
+			EnableApplyButton(true);
+		}
+	} else {
+		QString baseRes = ui->baseResolution->currentText();
+		int baseCX, baseCY;
+		sscanf(QT_TO_UTF8(baseRes), "%dx%d", &baseCX, &baseCY);
 
-// 		if (!ui->outputResolution->isEditable()) {
-// 			RecreateOutputResolutionWidget();
-// 			ui->outputResolution->blockSignals(true);
-// 			ResetDownscales((uint32_t)baseCX, (uint32_t)baseCY,
-// 					true);
-// 			ui->outputResolution->setCurrentText(res);
-// 		}
-// 	}
-// 	ui->outputResolution->blockSignals(false);
+		if (!ui->outputResolution->isEditable()) {
+			RecreateOutputResolutionWidget();
+			ui->outputResolution->blockSignals(true);
+			ResetDownscales((uint32_t)baseCX, (uint32_t)baseCY,
+					true);
+			ui->outputResolution->setCurrentText(res);
+		}
+	}
+	ui->outputResolution->blockSignals(false);
 
-// 	if (max_fps) {
-// 		for (int i = 0; i < ui->fpsCommon->count(); i++) {
-// 			double com_fpsd;
-// 			sscanf(QT_TO_UTF8(ui->fpsCommon->itemText(i)), "%lf",
-// 			       &com_fpsd);
+	if (max_fps) {
+		for (int i = 0; i < ui->fpsCommon->count(); i++) {
+			double com_fpsd;
+			sscanf(QT_TO_UTF8(ui->fpsCommon->itemText(i)), "%lf",
+			       &com_fpsd);
 
-// 			if (com_fpsd > max_fpsd) {
-// 				SetComboItemEnabled(ui->fpsCommon, i, false);
-// 				continue;
-// 			}
-// 		}
+			if (com_fpsd > max_fpsd) {
+				SetComboItemEnabled(ui->fpsCommon, i, false);
+				continue;
+			}
+		}
 
-// 		ui->fpsType->setCurrentIndex(0);
-// 		ui->fpsCommon->setCurrentIndex(closest_fps_index);
-// 		if (!valid) {
-// 			ui->fpsType->setProperty("changed", true);
-// 			ui->fpsCommon->setProperty("changed", true);
-// 			videoChanged = true;
-// 			EnableApplyButton(true);
-// 		}
-// 	} else {
-// 		for (int i = 0; i < ui->fpsCommon->count(); i++)
-// 			SetComboItemEnabled(ui->fpsCommon, i, true);
-// 	}
+		ui->fpsType->setCurrentIndex(0);
+		ui->fpsCommon->setCurrentIndex(closest_fps_index);
+		if (!valid) {
+			ui->fpsType->setProperty("changed", true);
+			ui->fpsCommon->setProperty("changed", true);
+			videoChanged = true;
+			EnableApplyButton(true);
+		}
+	} else {
+		for (int i = 0; i < ui->fpsCommon->count(); i++)
+			SetComboItemEnabled(ui->fpsCommon, i, true);
+	}
 
-// 	SetComboItemEnabled(ui->fpsType, 1, !max_fps);
-// 	SetComboItemEnabled(ui->fpsType, 2, !max_fps);
+	SetComboItemEnabled(ui->fpsType, 1, !max_fps);
+	SetComboItemEnabled(ui->fpsType, 2, !max_fps);
 
-// 	/* ------------------------------------ */
+	/* ------------------------------------ */
 
-// 	lastIgnoreRecommended = (int)ignoreRecommended;
-// 	lastServiceIdx = idx;
-// }
+	lastIgnoreRecommended = (int)ignoreRecommended;
+	lastServiceIdx = idx;
+}

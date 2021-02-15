@@ -244,10 +244,8 @@ private:
 	/* stream */
 	void InitStreamPage();
 	inline bool IsCustomService() const;
-	inline bool IsWebRTC() const;
-	inline int GetServiceIndex() const;
-	// #289 service list of radio buttons
-	// void LoadServices(bool showAll);
+	inline int IsWebRTC() const;
+	void LoadServices(bool showAll);
 	void OnOAuthStreamKeyConnected();
 	void OnAuthConnected();
 	QString lastService;
@@ -259,8 +257,7 @@ private slots:
 	void UpdateVodTrackSetting();
 	void UpdateServiceRecommendations();
 	void RecreateOutputResolutionWidget();
-	// #289 service list of radio buttons
-	// void UpdateResFPSLimits();
+	void UpdateResFPSLimits();
 	void UpdateMoreInfoLink();
 	void DisplayEnforceWarning(bool checked);
 	void on_show_clicked();

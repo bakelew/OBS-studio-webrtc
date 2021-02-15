@@ -418,9 +418,7 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 	HookWidget(ui->multiviewDrawNames,   CHECK_CHANGED,  GENERAL_CHANGED);
 	HookWidget(ui->multiviewDrawAreas,   CHECK_CHANGED,  GENERAL_CHANGED);
 	HookWidget(ui->multiviewLayout,      COMBO_CHANGED,  GENERAL_CHANGED);
-  // #289 service list of radio buttons
-	// HookWidget(ui->service,              COMBO_CHANGED,  STREAM1_CHANGED);
-  HookWidget(ui->millicastWebrtcRadioButton, CHECK_CHANGED, STREAM1_CHANGED);
+	HookWidget(ui->service,              COMBO_CHANGED,  STREAM1_CHANGED);
 	HookWidget(ui->server,               COMBO_CHANGED,  STREAM1_CHANGED);
 	HookWidget(ui->customServer,         EDIT_CHANGED,   STREAM1_CHANGED);
 	HookWidget(ui->key,                  EDIT_CHANGED,   STREAM1_CHANGED);
@@ -830,18 +828,10 @@ OBSBasicSettings::OBSBasicSettings(QWidget *parent)
 	connect(ui->basicSettingsButtonGroup, SIGNAL(buttonClicked(int)), this,
 		SLOT(SimpleRecordingEncoderChanged()));
 
-	// #289 service list of radio buttons
-	ui->serviceButtonGroup->setId(ui->millicastWebrtcRadioButton, 0);
-
 	// NOTE LUDO: #172 codecs list of radio buttons
 	ui->codecButtonGroup->setId(ui->h264RadioButton, 0);
 	ui->codecButtonGroup->setId(ui->vp8RadioButton, 1);
 	ui->codecButtonGroup->setId(ui->vp9RadioButton, 2);
-
-	// #271 do not list video codec H264 if it is not available in libwebrtc
-#ifdef DISABLE_WEBRTC_H264
-	ui->h264RadioButton->setVisible(false);
-#endif
 
 	// Get Bind to IP Addresses
 	obs_properties_t *ppts = obs_get_output_properties("rtmp_output");
@@ -4585,22 +4575,11 @@ void OBSBasicSettings::AdvancedStreamingSettingsChanged()
 {
 	bool visible = ui->simulcastEnable->isVisible();
 	ui->simulcastEnable->setVisible(!visible);
-	// #289 service list of radio buttons
-	QList<QAbstractButton *> listButtons =
-		ui->serviceButtonGroup->buttons();
-	for (QList<QAbstractButton *>::iterator iter = listButtons.begin();
-	     iter != listButtons.end(); ++iter) {
-		QRadioButton *radiobutton =
-			reinterpret_cast<QRadioButton *>(*iter);
-		if (radiobutton->isChecked()) {
-			if (radiobutton->text() ==
-			    QString("Millicast-WebRTC")) {
-				// Field publishApiUrl applicable only for Millicast
-				ui->publishApiUrlLabel->setVisible(!visible);
-				ui->publishApiUrl->setVisible(!visible);
-			}
-			break;
-		}
+	if (ui->service->currentText() ==
+	    QString("Millicast WebRTC Streaming Platform")) {
+		// Field publishApiUrl applicable only for Millicast
+		ui->publishApiUrlLabel->setVisible(!visible);
+		ui->publishApiUrl->setVisible(!visible);
 	}
 }
 
